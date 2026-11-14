@@ -49,6 +49,15 @@ class MainActivity : NativeActivity() {
                 f.delete()
                 moveTaskToBack(true)
             }
+            // sukhi shell: Rust asks to open a URL in the system browser (login).
+            val open = File(filesDir, "shell-open.txt")
+            if (open.exists()) {
+                val url = open.readText().trim()
+                open.delete()
+                if (url.startsWith("https://") || url.startsWith("http://")) {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                }
+            }
             exitWatcher.postDelayed(this, 250)
         }
     }

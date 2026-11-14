@@ -15,6 +15,7 @@ const HISTORY_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 const NEWTAB_CSS: Asset = asset!("../assets/about-newtab.css");
 const STUB_CSS: Asset = asset!("../assets/about-stub.css");
 const HISTORY_CSS: Asset = asset!("../assets/about-history.css");
+const LOGIN_CSS: Asset = asset!("../assets/about-shell-login.css");
 const BLITZ_LOGO_WTIH_TEXT: Asset = asset!("../assets/blitz-logo-with-text3.svg");
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -24,6 +25,7 @@ pub enum AboutPage {
     History,
     Bookmarks,
     ShellPing,
+    ShellLogin,
 }
 
 impl AboutPage {
@@ -37,6 +39,7 @@ impl AboutPage {
             "history" => Some(Self::History),
             "bookmarks" => Some(Self::Bookmarks),
             "shell-ping" => Some(Self::ShellPing),
+            "shell-login" => Some(Self::ShellLogin),
             _ => None,
         }
     }
@@ -48,6 +51,7 @@ impl AboutPage {
             Self::History => "History",
             Self::Bookmarks => "Bookmarks",
             Self::ShellPing => "Shell ping",
+            Self::ShellLogin => "ログイン",
         }
     }
 
@@ -58,6 +62,7 @@ impl AboutPage {
             Self::History => "about:history",
             Self::Bookmarks => "about:bookmarks",
             Self::ShellPing => "about:shell-ping",
+            Self::ShellLogin => "about:shell-login",
         }
     }
 
@@ -78,6 +83,7 @@ pub fn AboutPageView(page: AboutPage, on_navigate: Callback<Request>) -> Element
         AboutPage::History => rsx!(HistoryPage { on_navigate }),
         AboutPage::Bookmarks => rsx!(StubPage { name: "Bookmarks" }),
         AboutPage::ShellPing => rsx!(ShellPingPage {}),
+        AboutPage::ShellLogin => rsx!(ShellLoginPage {}),
     }
 }
 
@@ -199,6 +205,32 @@ fn ShellPingPage() -> Element {
         div { class: "about-stub",
             h1 { "殻が受けとりました" }
             p { "{got}" }
+        }
+    }
+}
+
+#[component]
+fn ShellLoginPage() -> Element {
+    use crate::login::{LOGIN, LoginState};
+    let state = LOGIN();
+    let waiting = state == LoginState::Waiting;
+    rsx! {
+        document::Link { rel: "stylesheet", href: LOGIN_CSS }
+        div { class: "shell-login",
+            h1 { "sukhi へようこそ" }
+            p { class: "lead", "ログインは、ふだん使っているブラウザで行います。終わると、ここに戻ってきます。" }
+            button {
+                class: "primary",
+                disabled: waiting,
+                onclick: move |_| crate::start_login(),
+                if waiting { "ブラウザで続けています…" } else { "ブラウザでログイン" }
+            }
+            if waiting {
+                p { class: "note", "ブラウザでの手続きが終わったら、このアプリに戻ってください。" }
+            }
+            if let LoginState::Failed(msg) = state {
+                p { class: "error", "{msg}" }
+            }
         }
     }
 }

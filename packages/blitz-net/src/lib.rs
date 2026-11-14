@@ -75,6 +75,14 @@ where
     tokio::spawn(fut);
 }
 
+/// The cookie jar every page request uses. Shared so an embedding app (the sukhi shell) can put a
+/// session cookie in after a native login.
+#[cfg(feature = "cookies")]
+pub fn cookie_jar() -> Arc<reqwest::cookie::Jar> {
+    static JAR: std::sync::OnceLock<Arc<reqwest::cookie::Jar>> = std::sync::OnceLock::new();
+    JAR.get_or_init(|| Arc::new(reqwest::cookie::Jar::default())).clone()
+}
+
 pub struct Provider {
     client: Client,
     waker: Arc<dyn NetWaker>,
@@ -86,7 +94,7 @@ impl Provider {
     pub fn new(waker: Option<Arc<dyn NetWaker>>) -> Self {
         let builder = reqwest::Client::builder();
         #[cfg(feature = "cookies")]
-        let builder = builder.cookie_store(true);
+        let builder = builder.cookie_provider(cookie_jar());
         let client = builder.build().unwrap();
 
         #[cfg(feature = "cache")]

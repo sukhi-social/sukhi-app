@@ -28,6 +28,7 @@ mod fps_overlay;
 mod history;
 mod icons;
 mod lobby;
+mod login;
 mod nav;
 mod status_bar;
 mod tab;
@@ -214,7 +215,17 @@ fn app() -> Element {
     let mut active_tab_id: Signal<TabId> = use_hook(|| {
         let first_tab_url = cli_initial_url.clone().unwrap_or_else(|| {
             if shell_mode() {
-                Url::parse(&lobby::origin(&lobby_dir())).unwrap_or_else(|_| home_url.clone())
+                let dir = lobby_dir();
+                let origin = lobby::origin(&dir);
+                // Logged in: put the saved session in the cookie jar before the first load.
+                // Not yet: start on the shell's own login page.
+                match login::saved_sid(&dir) {
+                    Some(sid) => {
+                        login::inject_cookie(&origin, &sid);
+                        Url::parse(&origin).unwrap_or_else(|_| home_url.clone())
+                    }
+                    None => Url::parse("about:shell-login").unwrap_or_else(|_| home_url.clone()),
+                }
             } else {
                 home_url.clone()
             }
@@ -256,6 +267,19 @@ fn app() -> Element {
             let file = dir.join("shell-callback.txt");
             if let Ok(got) = std::fs::read_to_string(&file) {
                 let _ = std::fs::remove_file(&file);
+                if got.starts_with("social.sukhi.shell://callback") {
+                    let dir = lobby_dir();
+                    let origin = lobby::origin(&dir);
+                    let tab = active_tab(tabs, active_tab_id());
+                    dioxus_core::spawn_forever(async move {
+                        if login::complete(&dir, &origin, got.trim()).await {
+                            if let Ok(url) = Url::parse(&origin) {
+                                tab.navigate(Request::get(url));
+                            }
+                        }
+                    });
+                    continue;
+                }
                 *SHELL_CALLBACK.write() = got;
                 // A fresh query each time: navigating to the same URL does not re-render the page.
                 static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -360,6 +384,12 @@ fn app() -> Element {
             }
         }
     )
+}
+
+/// The login page's button: open the system browser on the login page.
+pub(crate) fn start_login() {
+    let dir = lobby_dir();
+    login::start(&dir, &lobby::origin(&dir));
 }
 
 /// Ask the Kotlin activity (it watches this file) to move the app to the background.

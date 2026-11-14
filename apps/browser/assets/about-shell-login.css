@@ -1,0 +1,23 @@
+.shell-login {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 72px 28px 40px;
+  background: #fffaf3;
+  color: #2b2118;
+  font-family: sans-serif;
+}
+.shell-login h1 { font-size: 28px; margin: 0 0 12px; }
+.shell-login .lead { font-size: 17px; line-height: 1.7; color: #5a4a38; margin: 0 0 28px; }
+.shell-login button.primary {
+  width: 100%;
+  min-height: 56px;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 16px;
+  border: 1px solid #e8772e;
+  background: #e8772e;
+  color: white;
+}
+.shell-login button.primary:disabled { opacity: 0.6; }
+.shell-login .note { font-size: 15px; line-height: 1.6; color: #5a4a38; margin-top: 16px; }
+.shell-login .error { font-size: 15px; line-height: 1.6; color: #9a3412; margin-top: 16px; }
