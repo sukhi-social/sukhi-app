@@ -257,6 +257,24 @@ body,
 }
 
 
+.tab-stack {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex: 1 1 0px;
+  min-height: 0;
+  width: 100%;
+}
+
+.tab-leaving {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
 .tab-content {
   flex: 1 1 0px;
   min-height: 0;

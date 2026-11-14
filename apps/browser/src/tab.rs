@@ -210,10 +210,35 @@ pub fn TabWebView(tabs: Store<Vec<Tab>>, tab_id: TabId, active_tab_id: Signal<Ta
 
     let history = use_context::<HistoryService>();
 
+    // Page change: the new page is already loaded when it is swapped in, so keep the
+    // previous page's view on top for a moment and fade it out (cross-fade).
+    let mut generation = use_signal(|| 0u64);
+    let mut leaving = use_signal(|| None::<(u64, SubDocumentAttr)>);
+    let mut fade = use_signal(|| 1.0f32);
+
     use_effect(move || {
         if loaded_document.read().is_some() {
             if let Some(loaded) = loaded_document.write_unchecked().take().flatten() {
+                let old = tab.document().cloned();
                 commit_loaded_document(tab, history.clone(), loaded);
+                if let Some(old) = old {
+                    let old_gen = *generation.peek();
+                    let now_gen = old_gen + 1;
+                    generation.set(now_gen);
+                    leaving.set(Some((old_gen, old)));
+                    fade.set(1.0);
+                    spawn(async move {
+                        const STEPS: u32 = 11;
+                        for i in 1..=STEPS {
+                            tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+                            if *generation.peek() != now_gen {
+                                return; // a newer page change took over
+                            }
+                            fade.set(1.0 - i as f32 / STEPS as f32);
+                        }
+                        leaving.set(None);
+                    });
+                }
             }
         }
     });
@@ -246,15 +271,26 @@ pub fn TabWebView(tabs: Store<Vec<Tab>>, tab_id: TabId, active_tab_id: Signal<Ta
                 AboutPageView { page, on_navigate }
             }
         } else {
-            web-view {
-                key: "{id}",
-                class: "tab-content",
-                style: visibility,
-                "__webview_document": document,
-                onmounted: move |evt: Event<MountedData>| {
-                    let node_handle = evt.downcast::<NodeHandle>().unwrap();
-                    node_handle_lens.set(Some(node_handle.clone()));
-                },
+            div {
+                class: "tab-stack",
+                style: if id == active_tab_id() { "display: flex" } else { "display: none" },
+                web-view {
+                    key: "{id}-{generation}",
+                    class: "tab-content",
+                    "__webview_document": document,
+                    onmounted: move |evt: Event<MountedData>| {
+                        let node_handle = evt.downcast::<NodeHandle>().unwrap();
+                        node_handle_lens.set(Some(node_handle.clone()));
+                    },
+                }
+                if let Some((old_gen, old_doc)) = leaving() {
+                    web-view {
+                        key: "{id}-{old_gen}",
+                        class: "tab-content tab-leaving",
+                        style: "opacity: {fade}",
+                        "__webview_document": Some(old_doc),
+                    }
+                }
             }
         }
     )
