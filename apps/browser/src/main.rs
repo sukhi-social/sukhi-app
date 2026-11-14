@@ -174,8 +174,12 @@ fn app() -> Element {
                 if let Ok(mut slot) = SHELL_CALLBACK.lock() {
                     *slot = got;
                 }
-                active_tab(tabs, active_tab_id())
-                    .navigate(Request::get(AboutPage::ShellPing.parsed_url()));
+                // A fresh query each time: navigating to the same URL does not re-render the page.
+                static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if let Ok(url) = Url::parse(&format!("about:shell-ping?n={n}")) {
+                    active_tab(tabs, active_tab_id()).navigate(Request::get(url));
+                }
             }
         }
     });
