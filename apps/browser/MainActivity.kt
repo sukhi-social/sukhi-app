@@ -2,7 +2,11 @@ package dev.dioxus.main
 
 import android.app.NativeActivity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.RoundedCorner
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.os.Handler
 import android.os.Looper
 import java.io.File
@@ -49,6 +53,35 @@ class MainActivity : NativeActivity() {
         }
     }
 
+    // sukhi shell: the system bars, cutout, keyboard and screen corners, in dp, for Rust to read.
+    // top,right,bottom,left, keyboard-bottom, corner radii TL,TR,BR,BL
+    private fun publishInsets(insets: WindowInsets) {
+        val d = resources.displayMetrics.density
+        val top: Int; val right: Int; val bottom: Int; val left: Int; val ime: Int
+        if (Build.VERSION.SDK_INT >= 30) {
+            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            top = bars.top; right = bars.right; bottom = bars.bottom; left = bars.left
+            ime = insets.getInsets(WindowInsets.Type.ime()).bottom
+        } else {
+            @Suppress("DEPRECATION")
+            run {
+                top = insets.systemWindowInsetTop; right = insets.systemWindowInsetRight
+                bottom = insets.systemWindowInsetBottom; left = insets.systemWindowInsetLeft
+                ime = 0
+            }
+        }
+        fun corner(pos: Int): Int =
+            if (Build.VERSION.SDK_INT >= 31) (insets.getRoundedCorner(pos)?.radius ?: 0) else 0
+        val px = listOf(
+            top, right, bottom, left, ime,
+            corner(RoundedCorner.POSITION_TOP_LEFT), corner(RoundedCorner.POSITION_TOP_RIGHT),
+            corner(RoundedCorner.POSITION_BOTTOM_RIGHT), corner(RoundedCorner.POSITION_BOTTOM_LEFT),
+        )
+        val line = px.joinToString(",") { "%.1f".format(it / d) }
+        val f = File(filesDir, "shell-insets.txt")
+        if (!f.exists() || f.readText() != line) f.writeText(line)
+    }
+
     override fun onDestroy() {
         exitWatcher.removeCallbacks(exitCheck)
         super.onDestroy()
@@ -63,6 +96,16 @@ class MainActivity : NativeActivity() {
         super.onCreate(savedInstanceState)
         stashCallback(intent)
         exitWatcher.post(exitCheck)
+        // The page ground is light (cream), so the system bar icons turn dark.
+        if (Build.VERSION.SDK_INT >= 30) {
+            val light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            window.insetsController?.setSystemBarsAppearance(light, light)
+        }
+        window.decorView.setOnApplyWindowInsetsListener { v, insets ->
+            publishInsets(insets)
+            v.onApplyWindowInsets(insets)
+        }
 
         // wait until android has actually finished building the UI layout before search.
         window.decorView.post {

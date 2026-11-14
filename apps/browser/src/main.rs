@@ -72,6 +72,70 @@ pub(crate) static SHELL_FILES_DIR: std::sync::OnceLock<std::path::PathBuf> =
 /// A Signal, so the page that shows it re-renders when a new one arrives.
 pub(crate) static SHELL_CALLBACK: GlobalSignal<String> = Signal::global(String::new);
 
+/// sukhi shell: the space the system takes (dp), as the Kotlin activity reports it.
+/// `top,right,bottom,left, keyboard, corner radii TL,TR,BR,BL`
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) struct Insets {
+    top: f32,
+    right: f32,
+    bottom: f32,
+    left: f32,
+    keyboard: f32,
+    corners: [f32; 4],
+}
+
+impl Insets {
+    /// Before the first report: the old fixed guess.
+    const FALLBACK: Insets = Insets {
+        top: 30.0,
+        right: 0.0,
+        bottom: 44.0,
+        left: 0.0,
+        keyboard: 0.0,
+        corners: [0.0; 4],
+    };
+
+    fn parse(s: &str) -> Option<Insets> {
+        let v: Vec<f32> = s
+            .trim()
+            .split(',')
+            .map(|x| x.trim().parse::<f32>())
+            .collect::<std::result::Result<_, _>>()
+            .ok()?;
+        if v.len() != 9 {
+            return None;
+        }
+        Some(Insets {
+            top: v[0],
+            right: v[1],
+            bottom: v[2],
+            left: v[3],
+            keyboard: v[4],
+            corners: [v[5], v[6], v[7], v[8]],
+        })
+    }
+
+    /// The frame's padding: the bars, and the keyboard when it is taller than the bottom bar.
+    fn style(&self) -> String {
+        let bottom = self.bottom.max(self.keyboard);
+        format!(
+            "--safe-area-top: {t}px; --safe-area-right: {r}px; --safe-area-bottom: {b}px; --safe-area-left: {l}px; \
+             --safe-corner-tl: {c0}px; --safe-corner-tr: {c1}px; --safe-corner-br: {c2}px; --safe-corner-bl: {c3}px; \
+             padding: {t}px {r}px {b}px {l}px;",
+            t = self.top,
+            r = self.right,
+            b = bottom,
+            l = self.left,
+            c0 = self.corners[0],
+            c1 = self.corners[1],
+            c2 = self.corners[2],
+            c3 = self.corners[3]
+        )
+    }
+}
+
+pub(crate) static INSETS: GlobalSignal<Insets> = Signal::global(|| Insets::FALLBACK);
+
 #[derive(Clone)]
 pub(crate) struct CliInitialUrl(pub Option<Url>);
 
@@ -203,6 +267,28 @@ fn app() -> Element {
         }
     });
 
+    // sukhi shell: pick up the system bars / keyboard / corners the Kotlin activity wrote.
+    #[cfg(target_os = "android")]
+    use_future(move || async move {
+        let mut last = String::new();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let Some(dir) = SHELL_FILES_DIR.get() else {
+                continue;
+            };
+            let Ok(got) = std::fs::read_to_string(dir.join("shell-insets.txt")) else {
+                continue;
+            };
+            if got == last {
+                continue;
+            }
+            if let Some(insets) = Insets::parse(&got) {
+                *INSETS.write() = insets;
+            }
+            last = got;
+        }
+    });
+
     // sukhi shell: at launch, look for a newer release and (when there is one) open the lobby.
     #[cfg(target_os = "android")]
     use_future(move || async move {
@@ -216,32 +302,25 @@ fn app() -> Element {
         }
     });
 
-    // HACK: Winit doesn't support "safe area" on Android yet.
-    // So we just hardcode a fallback safe area.
-    const TOP_PAD: &str = if cfg!(target_os = "android") {
-        "30px"
-    } else {
-        "0px"
-    };
-    const BOTTOM_PAD: &str = if cfg!(target_os = "android") {
-        "44px"
-    } else {
-        "0px"
-    };
-
     let show_fps: Signal<bool> = use_signal(|| false);
 
     let fps_overlay_el = rsx!(if show_fps() {
         fps_overlay::FpsOverlay {}
     });
 
+    let frame_style = if cfg!(target_os = "android") {
+        INSETS().style()
+    } else {
+        String::new()
+    };
+
     let window_title = tab_display_title(active_tab(tabs, active_tab_id()));
 
     rsx!(
         div {
             id: "frame",
-            style: "--safe-area-top: {TOP_PAD}; padding-top: {TOP_PAD}; padding-bottom: {BOTTOM_PAD};",
-            class: if IS_MOBILE { "mobile" } else { "" },
+            style: "{frame_style}",
+            class: if shell_mode() { "mobile shell" } else if IS_MOBILE { "mobile" } else { "" },
             onmounted: set_devtools_title,
             title { "{window_title}" }
             document::Link { rel: "stylesheet", href: BROWSER_UI_STYLES }

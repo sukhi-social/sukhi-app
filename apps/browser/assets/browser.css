@@ -17,6 +17,11 @@ body,
   background: black;
 }
 
+/* sukhi shell: the page's own ground colour shows behind the system bars */
+#frame.shell {
+  background: #fffaf3;
+}
+
 .tabstrip {
   display: flex;
   flex-direction: row;
