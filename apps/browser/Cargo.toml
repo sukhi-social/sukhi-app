@@ -75,6 +75,12 @@ peniko = { workspace = true, optional = true }
 
 tokio = { workspace = true, features = ["time", "rt", "sync", "macros"] }
 
+# sukhi shell: update lobby (manifest + release download)
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = "0.10"
+
 # Allocators
 mimalloc = { version = "0.1.48", optional = true }
 

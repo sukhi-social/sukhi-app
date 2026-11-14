@@ -27,6 +27,7 @@ mod favicon;
 mod fps_overlay;
 mod history;
 mod icons;
+mod lobby;
 mod nav;
 mod status_bar;
 mod tab;
@@ -183,6 +184,19 @@ fn app() -> Element {
         }
     });
 
+    // sukhi shell: at launch, look for a newer release and (when there is one) open the lobby.
+    #[cfg(target_os = "android")]
+    use_future(move || async move {
+        // The files dir is set in android_main; wait a moment for it.
+        for _ in 0..20 {
+            if let Some(dir) = SHELL_FILES_DIR.get() {
+                lobby::at_launch(dir.clone()).await;
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    });
+
     // HACK: Winit doesn't support "safe area" on Android yet.
     // So we just hardcode a fallback safe area.
     const TOP_PAD: &str = if cfg!(target_os = "android") {
@@ -235,9 +249,24 @@ fn app() -> Element {
                 }
             }
             {fps_overlay_el}
+            if !lobby::NOTICE().is_empty() {
+                div { class: "lobby-notice", "{lobby::NOTICE()}" }
+            }
+            if let lobby::Lobby::Ready(rel) = lobby::LOBBY() {
+                lobby::LobbyView { rel, dir: lobby_dir() }
+            }
             StatusBar { tabs, active_tab_id }
         }
     )
+}
+
+#[cfg(target_os = "android")]
+fn lobby_dir() -> std::path::PathBuf {
+    SHELL_FILES_DIR.get().cloned().unwrap_or_default()
+}
+#[cfg(not(target_os = "android"))]
+fn lobby_dir() -> std::path::PathBuf {
+    std::path::PathBuf::new()
 }
 
 /// Name the browser UI's document in devtools: its `<title>` is the active

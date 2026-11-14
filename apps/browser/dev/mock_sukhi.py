@@ -7,6 +7,9 @@ from urllib.parse import urlparse, parse_qs
 
 CODES = {}   # code -> (challenge, expires_at)
 SCHEME = "social.sukhi.shell://callback"
+RELEASE = __import__("os").path.join(__import__("os").path.dirname(__file__), "release.json")
+
+def release_bytes(version): return (version.encode() * 40000)[:200_000]  # ~200 KB, deterministic
 
 def b64url(b): return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
 
@@ -30,6 +33,13 @@ class H(BaseHTTPRequestHandler):
             ch, st = q.get("challenge", [""])[0], q.get("state", [""])[0]
             code = secrets.token_urlsafe(32); CODES[code] = (ch, time.time() + 60)
             return self._send(302, headers=[("Location", f"{SCHEME}?code={code}&state={st}")])
+        if u.path == "/_app/manifest.json":  # edit release.json while this runs to change the release
+            rel = json.load(open(RELEASE))
+            rel["bytes_url"] = f"/_app/releases/{rel['version']}.bin"
+            rel["sha256"] = hashlib.sha256(release_bytes(rel["version"])).hexdigest()
+            return self._send(200, json.dumps(rel, ensure_ascii=False).encode(), "application/json")
+        if u.path.startswith("/_app/releases/") and u.path.endswith(".bin"):
+            return self._send(200, release_bytes(u.path.rsplit("/", 1)[1][:-4]), "application/octet-stream")
         self._send(404)
 
     def do_POST(self):
