@@ -721,6 +721,14 @@ pub(crate) fn handle_click(
                         }
                     }
                 }
+                // ARIA disclosure: with no JS, an element marked `aria-haspopup`
+                // toggles its `aria-expanded` and shows/hides the following
+                // sibling `role="menu"` panel (hidden by the page's `x-cloak`).
+                _ if el.attr(markup5ever::LocalName::from("aria-haspopup")).is_some() => {
+                    if doc.toggle_aria_popup(node_id) {
+                        break 'matched true;
+                    }
+                }
                 // Clicking labels triggers click, and possibly input event, of associated input
                 local_name!("label") => {
                     if let Some(target_node_id) =

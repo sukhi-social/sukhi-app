@@ -155,8 +155,33 @@ pub async fn complete(dir: &Path, origin: &str, callback: &str) -> bool {
     true
 }
 
-pub fn logout(dir: &Path) {
+/// Forget this login on the device, and end the server session too (best effort, in the background).
+pub fn logout(dir: &Path, origin: &str) {
+    let sid = saved_sid(dir);
     let _ = std::fs::remove_file(file(dir, "shell-sid.txt"));
+    let _ = std::fs::remove_file(file(dir, "login-pending.json"));
+    // (Called from the navigation provider, outside the Dioxus runtime, so no
+    // LOGIN.write() here; after a finished login it is already Idle.)
+    #[cfg(feature = "cookies")]
+    if let Ok(url) = blitz_traits::net::Url::parse(origin) {
+        blitz_net::cookie_jar().add_cookie_str("sukhi_sid=; Path=/; Max-Age=0", &url);
+    }
+    let Some(sid) = sid else { return };
+    let origin = origin.to_owned();
+    std::thread::spawn(move || {
+        let Ok(rt) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
+            return;
+        };
+        rt.block_on(async {
+            if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(10)).build() {
+                let _ = client
+                    .post(format!("{origin}/logout"))
+                    .header("Cookie", format!("sukhi_sid={sid}"))
+                    .send()
+                    .await;
+            }
+        });
+    });
 }
 
 #[cfg(test)]

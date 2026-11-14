@@ -768,6 +768,53 @@ impl BaseDocument {
         self.shell_provider.request_redraw();
     }
 
+    /// Toggle an `aria-haspopup` trigger: flip its `aria-expanded` and the
+    /// `x-cloak` attribute (which the page's CSS uses to hide) on the next
+    /// sibling element with `role="menu"`. Returns false if no panel found.
+    pub fn toggle_aria_popup(&mut self, trigger_id: NodeId) -> bool {
+        use markup5ever::{LocalName, QualName, ns};
+        let name = |s: &str| QualName {
+            prefix: None,
+            ns: ns!(),
+            local: LocalName::from(s),
+        };
+
+        let Some(parent_id) = self.nodes[trigger_id].parent else {
+            return false;
+        };
+        let siblings = &self.nodes[parent_id].children;
+        let Some(pos) = siblings.iter().position(|&c| c == trigger_id) else {
+            return false;
+        };
+        let panel = siblings[pos + 1..].iter().copied().find(|&c| {
+            self.nodes[c]
+                .element_data()
+                .and_then(|e| e.attr(LocalName::from("role")))
+                == Some("menu")
+        });
+        let Some(panel_id) = panel else {
+            return false;
+        };
+
+        let expanded = self.nodes[trigger_id]
+            .element_data()
+            .and_then(|e| e.attr(LocalName::from("aria-expanded")))
+            == Some("true");
+
+        let mut mutator = self.mutate();
+        if expanded {
+            mutator.set_attribute(trigger_id, name("aria-expanded"), "false");
+            mutator.set_attribute(panel_id, name("x-cloak"), "");
+        } else {
+            mutator.set_attribute(trigger_id, name("aria-expanded"), "true");
+            mutator.clear_attribute(panel_id, name("x-cloak"));
+        }
+        drop(mutator);
+
+        self.shell_provider.request_redraw();
+        true
+    }
+
     pub fn set_style_property(&mut self, node_id: NodeId, name: &str, value: &str) {
         let node = &mut self.nodes[node_id];
         let did_change = node.element_data_mut().unwrap().set_style_property(

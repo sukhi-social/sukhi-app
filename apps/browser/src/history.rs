@@ -153,6 +153,15 @@ pub(crate) fn shell_navigate(history: &SyncStore<History>, req: Request) {
     }
 
     let path = req.url.path();
+    // Logging out: forget the login on this device and go back to the shell's login page.
+    if req.method == Method::POST && path == "/logout" {
+        let dir = crate::lobby_dir();
+        crate::login::logout(&dir, &crate::lobby::origin(&dir));
+        if let Ok(url) = blitz_traits::net::Url::parse("about:shell-login") {
+            HistoryNav::reset(history, vec![Request::get(url)]);
+        }
+        return;
+    }
     let is_root = req.method == Method::GET
         && req.url.query().is_none()
         && TAB_ROOTS.contains(&path);
