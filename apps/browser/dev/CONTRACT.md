@@ -16,3 +16,11 @@ Shell → server (native HTTP, no cookies):
 
 Rules: code is single-use, expires in 60 s, bound to its challenge. state must match what the
 shell sent. The shell puts `sid` in the page cookie jar as `sukhi_sid` (HttpOnly) and in Keystore.
+
+## As built (2026-11-15)
+- Real server: web-next `server/routes/app.ts` (sukhi-fedi branch feat/web-next-app-endpoints). `confirm` is a POST
+  with a one-time nonce (the mock keeps GET so it stays tappable). The token is *moved* to a new session.
+- Shell: `apps/browser/src/login.rs`. Opens the browser through `files/shell-open.txt` (Kotlin watches it), keeps
+  verifier + state in `files/login-pending.json` (deleted on first callback, so one try per login), keeps `sid` in
+  `files/shell-sid.txt` (app-private; Keystore is later) and puts it in the shared jar `blitz_net::cookie_jar()`.
+- Launch: no saved sid → `about:shell-login`; saved sid → cookie injected before the first load.
