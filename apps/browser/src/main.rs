@@ -10,7 +10,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::sync::Arc;
 
-use blitz_traits::net::Url;
+use blitz_traits::net::{Request, Url};
 use dioxus_native::{NodeHandle, WindowAttributes, prelude::*, use_back_button};
 
 #[cfg(target_os = "macos")]
@@ -50,9 +50,19 @@ pub(crate) const IS_MOBILE: bool = cfg!(any(target_os = "android", target_os = "
 #[unsafe(no_mangle)]
 #[cfg(target_os = "android")]
 pub fn android_main(android_app: dioxus_native::AndroidApp) {
+    if let Some(dir) = android_app.internal_data_path() {
+        let _ = SHELL_FILES_DIR.set(dir);
+    }
     dioxus_native::set_android_app(android_app);
     main()
 }
+
+/// sukhi shell: where the Kotlin activity drops a returning URL (login callback).
+#[cfg(target_os = "android")]
+pub(crate) static SHELL_FILES_DIR: std::sync::OnceLock<std::path::PathBuf> =
+    std::sync::OnceLock::new();
+/// sukhi shell: the last URL handed back to the shell (probe: shown on about:shell-ping).
+pub(crate) static SHELL_CALLBACK: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
 #[derive(Clone)]
 pub(crate) struct CliInitialUrl(pub Option<Url>);
@@ -148,6 +158,26 @@ fn app() -> Element {
     // go back to.
     use_back_button(move || {
         active_tab(tabs, active_tab_id()).go_back();
+    });
+
+    // sukhi shell probe: pick up a returning URL that the Kotlin activity wrote to a file.
+    #[cfg(target_os = "android")]
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let Some(dir) = SHELL_FILES_DIR.get() else {
+                continue;
+            };
+            let file = dir.join("shell-callback.txt");
+            if let Ok(got) = std::fs::read_to_string(&file) {
+                let _ = std::fs::remove_file(&file);
+                if let Ok(mut slot) = SHELL_CALLBACK.lock() {
+                    *slot = got;
+                }
+                active_tab(tabs, active_tab_id())
+                    .navigate(Request::get(AboutPage::ShellPing.parsed_url()));
+            }
+        }
     });
 
     // HACK: Winit doesn't support "safe area" on Android yet.

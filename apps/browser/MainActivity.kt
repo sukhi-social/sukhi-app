@@ -1,7 +1,9 @@
 package dev.dioxus.main
 
 import android.app.NativeActivity
+import android.content.Intent
 import android.os.Bundle
+import java.io.File
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -23,8 +25,22 @@ class MainActivity : NativeActivity() {
         return null
     }
 
+    // sukhi shell: a returning URL (login callback) is handed to Rust through a file only this app can write.
+    private fun stashCallback(intent: Intent?) {
+        val data = intent?.dataString ?: return
+        if (intent.action == Intent.ACTION_VIEW && data.startsWith("social.sukhi.shell://")) {
+            File(filesDir, "shell-callback.txt").writeText(data)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        stashCallback(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stashCallback(intent)
         
         // wait until android has actually finished building the UI layout before search.
         window.decorView.post {

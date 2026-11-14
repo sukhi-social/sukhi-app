@@ -77,7 +77,7 @@ pub fn AboutPageView(page: AboutPage, on_navigate: Callback<Request>) -> Element
         AboutPage::Settings => rsx!(StubPage { name: "Settings" }),
         AboutPage::History => rsx!(HistoryPage { on_navigate }),
         AboutPage::Bookmarks => rsx!(StubPage { name: "Bookmarks" }),
-        AboutPage::ShellPing => rsx!(StubPage { name: "殻が /_app/ping を受けとりました" }),
+        AboutPage::ShellPing => rsx!(ShellPingPage {}),
     }
 }
 
@@ -187,6 +187,21 @@ fn HistoryEntryRow(
                 div { class: "entry-url", "{entry.url}" }
                 div { class: "entry-time", "{elapsed}" }
             }
+        }
+    }
+}
+
+#[component]
+fn ShellPingPage() -> Element {
+    let got = crate::SHELL_CALLBACK
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default();
+    rsx! {
+        document::Link { rel: "stylesheet", href: STUB_CSS }
+        div { class: "about-stub",
+            h1 { "殻が受けとりました" }
+            p { "{got}" }
         }
     }
 }

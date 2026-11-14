@@ -8,3 +8,8 @@ icon = ["./assets/blitz-logo.png", "./assets/blitz-logo.ico"]
 
 [bundle.windows]
 webview_install_mode = "Skip"
+
+# sukhi shell probe: custom scheme for testing the return path.
+# Production uses verified App Links (https://sukhi.social/_app/callback).
+[deep_links]
+schemes = ["social.sukhi.shell"]
