@@ -3,7 +3,7 @@ android_main_activity = "MainActivity.kt"
 
 [bundle]
 publisher = "DioxusLabs"
-identifier = "com.dioxuslabs.blitz"
+identifier = "social.sukhi.shell"
 icon = ["./assets/blitz-logo.png", "./assets/blitz-logo.ico"]
 
 [bundle.windows]

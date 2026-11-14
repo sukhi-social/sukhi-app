@@ -23,6 +23,7 @@ pub enum AboutPage {
     Settings,
     History,
     Bookmarks,
+    ShellPing,
 }
 
 impl AboutPage {
@@ -35,6 +36,7 @@ impl AboutPage {
             "settings" => Some(Self::Settings),
             "history" => Some(Self::History),
             "bookmarks" => Some(Self::Bookmarks),
+            "shell-ping" => Some(Self::ShellPing),
             _ => None,
         }
     }
@@ -45,6 +47,7 @@ impl AboutPage {
             Self::Settings => "Settings",
             Self::History => "History",
             Self::Bookmarks => "Bookmarks",
+            Self::ShellPing => "Shell ping",
         }
     }
 
@@ -54,6 +57,7 @@ impl AboutPage {
             Self::Settings => "about:settings",
             Self::History => "about:history",
             Self::Bookmarks => "about:bookmarks",
+            Self::ShellPing => "about:shell-ping",
         }
     }
 
@@ -73,6 +77,7 @@ pub fn AboutPageView(page: AboutPage, on_navigate: Callback<Request>) -> Element
         AboutPage::Settings => rsx!(StubPage { name: "Settings" }),
         AboutPage::History => rsx!(HistoryPage { on_navigate }),
         AboutPage::Bookmarks => rsx!(StubPage { name: "Bookmarks" }),
+        AboutPage::ShellPing => rsx!(StubPage { name: "殻が /_app/ping を受けとりました" }),
     }
 }
 

@@ -100,6 +100,16 @@ pub struct BrowserNavProvider {
 
 impl NavigationProvider for BrowserNavProvider {
     fn navigate_to(&self, options: NavigationOptions) {
+        // sukhi shell: reserved URLs on the pinned origin go to the shell, not the page.
+        if options.url.scheme() == "https"
+            && options.url.host_str() == Some("sukhi.social")
+            && options.url.path() == "/_app/ping"
+        {
+            if let Ok(url) = blitz_traits::net::Url::parse("about:shell-ping") {
+                HistoryNav::navigate(&self.history, Request::get(url));
+            }
+            return;
+        }
         HistoryNav::navigate(&self.history, options.into_request());
     }
 }
