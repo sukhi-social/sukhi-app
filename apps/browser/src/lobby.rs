@@ -77,7 +77,7 @@ fn release_file(dir: &Path, version: &str) -> PathBuf {
 }
 
 /// Where the shell talks to. A file lets a debug build point at a mock; otherwise sukhi.social.
-fn origin(dir: &Path) -> String {
+pub(crate) fn origin(dir: &Path) -> String {
     std::fs::read_to_string(dir.join("shell-origin.txt"))
         .map(|s| s.trim().trim_end_matches('/').to_owned())
         .ok()

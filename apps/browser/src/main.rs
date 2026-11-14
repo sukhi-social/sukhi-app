@@ -36,6 +36,7 @@ mod toolbar;
 mod url_suggestions;
 
 use about_pages::AboutPage;
+use history::HistoryNav;
 use browser_history::{BrowsingHistory, HistoryService, HistoryStore, MAX_HISTORY_ENTRIES};
 use status_bar::StatusBar;
 use tab::{Tab, TabId, TabStoreImplExt, TabWebView, active_tab, open_tab, tab_display_title};
@@ -46,6 +47,11 @@ use url_suggestions::provide_url_suggester;
 use winit::platform::windows::WinIcon;
 
 static BROWSER_UI_STYLES: Asset = asset!("../assets/browser.css");
+/// sukhi shell: one full-bleed page, no tab strip / URL bar / status bar.
+/// Always on in the Android build; `SUKHI_SHELL=1` turns it on elsewhere for trying it out.
+pub(crate) fn shell_mode() -> bool {
+    cfg!(target_os = "android") || std::env::var_os("SUKHI_SHELL").is_some()
+}
 pub(crate) const IS_MOBILE: bool = cfg!(any(target_os = "android", target_os = "ios"));
 
 #[unsafe(no_mangle)]
@@ -142,7 +148,13 @@ fn app() -> Element {
 
     let tabs: Store<Vec<Tab>> = use_store(Vec::new);
     let mut active_tab_id: Signal<TabId> = use_hook(|| {
-        let first_tab_url = cli_initial_url.clone().unwrap_or_else(|| home_url.clone());
+        let first_tab_url = cli_initial_url.clone().unwrap_or_else(|| {
+            if shell_mode() {
+                Url::parse(&lobby::origin(&lobby_dir())).unwrap_or_else(|_| home_url.clone())
+            } else {
+                home_url.clone()
+            }
+        });
         let tab = open_tab(tabs, first_tab_url, net_provider.clone());
         Signal::new(tab.tab_id())
     });
@@ -158,8 +170,15 @@ fn app() -> Element {
     // Navigate back in the active tab's history when the (Android) hardware
     // back button is pressed. `go_back` is a no-op when there is no history to
     // go back to.
+    // In the shell, back walks the stack that `history::shell_navigate` keeps (a bottom-bar
+    // place sits on top of Home); at the bottom, the app goes to the background.
     use_back_button(move || {
-        active_tab(tabs, active_tab_id()).go_back();
+        let tab = active_tab(tabs, active_tab_id());
+        if shell_mode() && !tab.nav_history().has_back() {
+            leave_to_background();
+        } else {
+            tab.go_back();
+        }
     });
 
     // sukhi shell probe: pick up a returning URL that the Kotlin activity wrote to a file.
@@ -226,19 +245,21 @@ fn app() -> Element {
             onmounted: set_devtools_title,
             title { "{window_title}" }
             document::Link { rel: "stylesheet", href: BROWSER_UI_STYLES }
-            TabStrip {
-                tabs,
-                active_tab_id,
-                home_url,
-                open_new_tab,
-            }
-            Toolbar {
-                url_input_handle,
-                url_input_value,
-                tabs,
-                active_tab_id,
-                open_new_tab,
-                show_fps,
+            if !shell_mode() {
+                TabStrip {
+                    tabs,
+                    active_tab_id,
+                    home_url,
+                    open_new_tab,
+                }
+                Toolbar {
+                    url_input_handle,
+                    url_input_value,
+                    tabs,
+                    active_tab_id,
+                    open_new_tab,
+                    show_fps,
+                }
             }
             for tab in tabs.iter() {
                 TabWebView {
@@ -255,9 +276,19 @@ fn app() -> Element {
             if let lobby::Lobby::Ready(rel) = lobby::LOBBY() {
                 lobby::LobbyView { rel, dir: lobby_dir() }
             }
-            StatusBar { tabs, active_tab_id }
+            if !shell_mode() {
+                StatusBar { tabs, active_tab_id }
+            }
         }
     )
+}
+
+/// Ask the Kotlin activity (it watches this file) to move the app to the background.
+fn leave_to_background() {
+    let dir = lobby_dir();
+    if !dir.as_os_str().is_empty() {
+        let _ = std::fs::write(dir.join("shell-exit.txt"), "1");
+    }
 }
 
 #[cfg(target_os = "android")]

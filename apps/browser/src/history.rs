@@ -54,6 +54,29 @@ impl<Lens> Store<History, Lens> {
         self.urls().push(req);
         *self.current().write() += 1;
     }
+
+    /// Swap the current entry for `req` (no new step to go back to).
+    pub(crate) fn replace(&self, req: Request)
+    where
+        Lens: Writable,
+    {
+        let idx = self.current_idx();
+        self.urls().write()[idx] = req;
+    }
+
+    /// Start the stack over: `reqs` becomes the whole history, standing on its last entry.
+    pub(crate) fn reset(&self, reqs: Vec<Request>)
+    where
+        Lens: Writable,
+    {
+        if reqs.is_empty() {
+            return;
+        }
+        let last = reqs.len() - 1;
+        *self.current().write() = 0;
+        *self.urls().write() = reqs;
+        *self.current().write() = last;
+    }
 }
 
 /// Public extension trait exposing history navigation for use across modules.
@@ -66,6 +89,8 @@ pub trait HistoryNav {
     fn go_back(&mut self);
     fn go_forward(&mut self);
     fn navigate(&self, req: Request);
+    fn replace(&self, req: Request);
+    fn reset(&self, reqs: Vec<Request>);
 }
 
 impl HistoryNav for SyncStore<History> {
@@ -92,6 +117,64 @@ impl HistoryNav for SyncStore<History> {
     fn navigate(&self, req: Request) {
         HistoryStoreImplExt::navigate(self, req)
     }
+
+    fn replace(&self, req: Request) {
+        HistoryStoreImplExt::replace(self, req)
+    }
+
+    fn reset(&self, reqs: Vec<Request>) {
+        HistoryStoreImplExt::reset(self, reqs)
+    }
+}
+
+/// The four places the bottom bar goes to. Each one is the bottom of its own stack.
+const TAB_ROOTS: [&str; 4] = ["/", "/search", "/compose", "/notifications"];
+/// Pages that are steps of a flow, not places: opening one replaces the page you were on.
+const FLOW_PREFIXES: [&str; 3] = ["/login", "/check", "/_app"];
+
+/// sukhi shell: what a navigation does to the back stack.
+/// - another site: leave to the external browser
+/// - a bottom-bar place: start that place's stack (Home underneath, so back goes Home, then out)
+/// - a form post, the same page again, a login/check step: replace, don't add a step back
+/// - anything else: add a step
+pub(crate) fn shell_navigate(history: &SyncStore<History>, req: Request) {
+    use blitz_traits::net::Method;
+
+    let current = history.current_url().read().url.clone();
+    let same_site = matches!(current.scheme(), "http" | "https")
+        && req.url.scheme() == current.scheme()
+        && req.url.host_str() == current.host_str()
+        && req.url.port_or_known_default() == current.port_or_known_default();
+    let current_is_site = matches!(current.scheme(), "http" | "https");
+
+    if current_is_site && !same_site {
+        crate::nav::open_in_external_browser(&req);
+        return;
+    }
+
+    let path = req.url.path();
+    let is_root = req.method == Method::GET
+        && req.url.query().is_none()
+        && TAB_ROOTS.contains(&path);
+    if is_root {
+        if req.url == current {
+            HistoryNav::replace(history, req);
+        } else if path == "/" {
+            HistoryNav::reset(history, vec![req]);
+        } else {
+            let mut home = req.url.clone();
+            home.set_path("/");
+            HistoryNav::reset(history, vec![Request::get(home), req]);
+        }
+        return;
+    }
+
+    let is_flow = FLOW_PREFIXES.iter().any(|p| path.starts_with(p));
+    if req.method != Method::GET || req.url == current || is_flow {
+        HistoryNav::replace(history, req);
+    } else {
+        HistoryNav::navigate(history, req);
+    }
 }
 
 pub struct BrowserNavProvider {
@@ -108,6 +191,10 @@ impl NavigationProvider for BrowserNavProvider {
             if let Ok(url) = blitz_traits::net::Url::parse("about:shell-ping") {
                 HistoryNav::navigate(&self.history, Request::get(url));
             }
+            return;
+        }
+        if crate::shell_mode() {
+            shell_navigate(&self.history, options.into_request());
             return;
         }
         HistoryNav::navigate(&self.history, options.into_request());

@@ -3,6 +3,8 @@ package dev.dioxus.main
 import android.app.NativeActivity
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import java.io.File
 import android.view.SurfaceView
 import android.view.View
@@ -33,6 +35,25 @@ class MainActivity : NativeActivity() {
         }
     }
 
+    // sukhi shell: Rust asks to leave to the background (back pressed at the bottom of the stack)
+    // by writing a file; no JNI.
+    private val exitWatcher = Handler(Looper.getMainLooper())
+    private val exitCheck = object : Runnable {
+        override fun run() {
+            val f = File(filesDir, "shell-exit.txt")
+            if (f.exists()) {
+                f.delete()
+                moveTaskToBack(true)
+            }
+            exitWatcher.postDelayed(this, 250)
+        }
+    }
+
+    override fun onDestroy() {
+        exitWatcher.removeCallbacks(exitCheck)
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         stashCallback(intent)
@@ -41,7 +62,8 @@ class MainActivity : NativeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         stashCallback(intent)
-        
+        exitWatcher.post(exitCheck)
+
         // wait until android has actually finished building the UI layout before search.
         window.decorView.post {
             val nativeView = findNativeSurfaceView(window.decorView)
