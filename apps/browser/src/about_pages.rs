@@ -193,10 +193,7 @@ fn HistoryEntryRow(
 
 #[component]
 fn ShellPingPage() -> Element {
-    let got = crate::SHELL_CALLBACK
-        .lock()
-        .map(|g| g.clone())
-        .unwrap_or_default();
+    let got = crate::SHELL_CALLBACK();
     rsx! {
         document::Link { rel: "stylesheet", href: STUB_CSS }
         div { class: "about-stub",

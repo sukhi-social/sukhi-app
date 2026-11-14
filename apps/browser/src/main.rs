@@ -62,7 +62,8 @@ pub fn android_main(android_app: dioxus_native::AndroidApp) {
 pub(crate) static SHELL_FILES_DIR: std::sync::OnceLock<std::path::PathBuf> =
     std::sync::OnceLock::new();
 /// sukhi shell: the last URL handed back to the shell (probe: shown on about:shell-ping).
-pub(crate) static SHELL_CALLBACK: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+/// A Signal, so the page that shows it re-renders when a new one arrives.
+pub(crate) static SHELL_CALLBACK: GlobalSignal<String> = Signal::global(String::new);
 
 #[derive(Clone)]
 pub(crate) struct CliInitialUrl(pub Option<Url>);
@@ -171,9 +172,7 @@ fn app() -> Element {
             let file = dir.join("shell-callback.txt");
             if let Ok(got) = std::fs::read_to_string(&file) {
                 let _ = std::fs::remove_file(&file);
-                if let Ok(mut slot) = SHELL_CALLBACK.lock() {
-                    *slot = got;
-                }
+                *SHELL_CALLBACK.write() = got;
                 // A fresh query each time: navigating to the same URL does not re-render the page.
                 static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
                 let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
