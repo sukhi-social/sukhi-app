@@ -127,6 +127,20 @@ pub fn active_tab(tabs: Store<Vec<Tab>>, active_id: TabId) -> Store<Tab> {
 // a render can't sample a half-applied state where the new document is showing
 // under the previous page's icon; the favicon is refilled asynchronously by
 // the spawned probe.
+/// The page mounted under `handle` is attached and has no stylesheets still loading.
+fn page_ready(handle: &NodeHandle) -> bool {
+    let Some(doc) = handle.try_doc() else {
+        return false;
+    };
+    let Some(node) = doc.get_node(handle.node_id()) else {
+        return false;
+    };
+    let Some(sub) = node.element_data().and_then(|el| el.sub_doc_data()) else {
+        return false;
+    };
+    !sub.inner().has_pending_critical_resources()
+}
+
 fn commit_loaded_document<Lens>(
     tab: Store<Tab, Lens>,
     history: HistoryService,
@@ -227,7 +241,26 @@ pub fn TabWebView(tabs: Store<Vec<Tab>>, tab_id: TabId, active_tab_id: Signal<Ta
                     generation.set(now_gen);
                     leaving.set(Some((old_gen, old)));
                     fade.set(1.0);
+                    let old_node = tab.node_handle().read().as_ref().map(|h| h.node_id());
                     spawn(async move {
+                        // Keep the previous page fully on top until the new page's
+                        // stylesheets are in (cap ~1.5 s), so unstyled content never shows.
+                        for _ in 0..90 {
+                            tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+                            if *generation.peek() != now_gen {
+                                return;
+                            }
+                            let ready = tab
+                                .node_handle()
+                                .read()
+                                .as_ref()
+                                .is_some_and(|h| Some(h.node_id()) != old_node && page_ready(h));
+                            if ready {
+                                break;
+                            }
+                        }
+                        // let the first styled frame be painted before revealing
+                        tokio::time::sleep(std::time::Duration::from_millis(48)).await;
                         const STEPS: u32 = 11;
                         for i in 1..=STEPS {
                             tokio::time::sleep(std::time::Duration::from_millis(16)).await;
@@ -258,6 +291,11 @@ pub fn TabWebView(tabs: Store<Vec<Tab>>, tab_id: TabId, active_tab_id: Signal<Ta
         "display: none"
     };
 
+    let mut layers = vec![(generation(), false)];
+    if let Some((g, _)) = leaving() {
+        layers.push((g, true));
+    }
+
     let on_navigate = use_callback(move |req: Request| {
         tab.navigate(req);
     });
@@ -274,21 +312,18 @@ pub fn TabWebView(tabs: Store<Vec<Tab>>, tab_id: TabId, active_tab_id: Signal<Ta
             div {
                 class: "tab-stack",
                 style: if id == active_tab_id() { "display: flex" } else { "display: none" },
-                web-view {
-                    key: "{id}-{generation}",
-                    class: "tab-content",
-                    "__webview_document": document,
-                    onmounted: move |evt: Event<MountedData>| {
-                        let node_handle = evt.downcast::<NodeHandle>().unwrap();
-                        node_handle_lens.set(Some(node_handle.clone()));
-                    },
-                }
-                if let Some((old_gen, old_doc)) = leaving() {
+                // One keyed list, so the leaving page's element is kept (its document can
+                // only be attached once) and just moves behind/in front as the new one mounts.
+                for (g, is_old) in layers {
                     web-view {
-                        key: "{id}-{old_gen}",
-                        class: "tab-content tab-leaving",
-                        style: "opacity: {fade}",
-                        "__webview_document": Some(old_doc),
+                        key: "{id}-{g}",
+                        class: if is_old { "tab-content tab-leaving" } else { "tab-content" },
+                        style: if is_old { format!("opacity: {}", fade()) } else { String::new() },
+                        "__webview_document": if is_old { leaving().map(|(_, d)| d) } else { document.clone() },
+                        onmounted: move |evt: Event<MountedData>| {
+                            let node_handle = evt.downcast::<NodeHandle>().unwrap();
+                            node_handle_lens.set(Some(node_handle.clone()));
+                        },
                     }
                 }
             }
