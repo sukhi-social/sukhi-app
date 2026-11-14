@@ -261,13 +261,21 @@ pub fn TabWebView(tabs: Store<Vec<Tab>>, tab_id: TabId, active_tab_id: Signal<Ta
                         }
                         // let the first styled frame be painted before revealing
                         tokio::time::sleep(std::time::Duration::from_millis(48)).await;
-                        const STEPS: u32 = 11;
-                        for i in 1..=STEPS {
+                        // Ease-out over ~220 ms: moves fast at first (when attention is
+                        // high, so it feels prompt) and settles softly. Timed by the clock,
+                        // not by step count, so slow frames don't stretch it.
+                        const FADE_MS: f32 = 220.0;
+                        let start = std::time::Instant::now();
+                        loop {
                             tokio::time::sleep(std::time::Duration::from_millis(16)).await;
                             if *generation.peek() != now_gen {
                                 return; // a newer page change took over
                             }
-                            fade.set(1.0 - i as f32 / STEPS as f32);
+                            let t = (start.elapsed().as_secs_f32() * 1000.0 / FADE_MS).min(1.0);
+                            fade.set((1.0 - t).powi(3));
+                            if t >= 1.0 {
+                                break;
+                            }
                         }
                         leaving.set(None);
                     });
