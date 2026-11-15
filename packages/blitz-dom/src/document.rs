@@ -1892,11 +1892,12 @@ impl BaseDocument {
         true
     }
 
-    /// The pressed look is painted a moment after the finger goes down: there is a beat
-    /// between touching and pressing in, and a face painted at once feels too quick.
-    pub const PRESS_ONSET_DELAY: std::time::Duration = std::time::Duration::from_millis(60);
-    /// After the finger lifts the face stays 30 ms (a short tap) to 100 ms (held 300 ms or more).
-    pub const PRESS_TAIL_MIN: std::time::Duration = std::time::Duration::from_millis(30);
+    /// The pressed look starts at once: the page's CSS transition eases it in, so a delay
+    /// here only reads as lag (and a quick tap would flash). Kept as a knob, at 0.
+    pub const PRESS_ONSET_DELAY: std::time::Duration = std::time::Duration::from_millis(0);
+    /// After the finger lifts the face stays 60 ms (a short tap: long enough for the ease-in
+    /// to land, so it pulses instead of flashing) to 100 ms (held 300 ms or more).
+    pub const PRESS_TAIL_MIN: std::time::Duration = std::time::Duration::from_millis(60);
     pub const PRESS_TAIL_MAX: std::time::Duration = std::time::Duration::from_millis(100);
     pub const PRESS_TAIL_FULL_AT: std::time::Duration = std::time::Duration::from_millis(300);
 
