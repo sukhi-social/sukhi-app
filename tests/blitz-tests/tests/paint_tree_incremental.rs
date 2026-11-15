@@ -653,13 +653,14 @@ fn fixed_boxes_scroll_only_with_a_non_viewport_containing_block() {
         );
 
         doc.set_viewport_scroll(blitz_dom::Point { x: 0.0, y: 30.0 });
+        // `hit` takes document coordinates: a pointer at viewport y=60 is at 60 + scroll.
         assert_eq!(
-            hit(&doc, 20.0, 60.0),
+            hit(&doc, 20.0, 90.0),
             g0,
             "z-auto fixed under viewport scroll ({incremental})"
         );
         assert_eq!(
-            hit(&doc, 60.0, 60.0),
+            hit(&doc, 60.0, 90.0),
             g1,
             "z-index fixed under viewport scroll ({incremental})"
         );
@@ -697,5 +698,35 @@ fn positioned_descendant_of_static_box_paints_above_earlier_positioned_sibling()
 
         assert_eq!(hit(&doc, 22.0, 50.0), comment, "{incremental}");
         assert_eq!(hit(&doc, 22.0, 25.0), before, "{incremental}");
+    }
+}
+
+const FIXED_Z_NAV: &str = r#"<html><head><style>
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+    main { flex: 1; height: 2000px; }
+    #nav { position: fixed; inset: auto 0 0 0; height: 60px; z-index: 30; }
+</style></head><body>
+    <main></main>
+    <nav id="nav"></nav>
+</body></html>"#;
+
+/// A z-indexed `position: fixed` bar anchored to the viewport bottom (a bottom tab bar) is
+/// painted from the memoised hoisted position, which must cancel the viewport scroll: the
+/// root element, not `None`, is its containing block, so it once scrolled away with the page.
+#[test]
+fn z_indexed_fixed_box_stays_on_screen_when_the_viewport_scrolls() {
+    for incremental in [false, true] {
+        let mut doc = make_doc(FIXED_Z_NAV, incremental);
+        let nav = id(&doc, "#nav");
+        let root = doc.root_element().id;
+        let at_rest = hoisted_entry(&doc, root, nav).expect("hoisted").1;
+
+        doc.set_viewport_scroll(blitz_dom::Point { x: 0.0, y: 300.0 });
+        let scrolled = hoisted_entry(&doc, root, nav).expect("hoisted").1;
+
+        // The scene is translated by -scroll; the box must be shifted back by +scroll.
+        assert_eq!(scrolled.1, at_rest.1 + 300.0, "incremental={incremental}");
+        // And a pointer on the bar (document coordinates = viewport + scroll) still hits it.
+        assert_eq!(hit(&doc, 20.0, 380.0 + 300.0), nav, "incremental={incremental}");
     }
 }

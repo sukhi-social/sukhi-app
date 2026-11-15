@@ -288,7 +288,8 @@ fn fragment_link_uses_auto_scroll_behavior_from_root_style() {
     );
 
     click(&mut doc, 5.0, 5.0);
-    assert!(!doc.is_animating());
+    // (`is_animating` is also true for the brief press-release tail, so "no smooth
+    // scroll" is shown by the scroll having already moved, with no frames driven.)
     assert!(doc.viewport_scroll().y > 0.0);
 }
 

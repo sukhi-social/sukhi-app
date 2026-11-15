@@ -180,6 +180,10 @@ fn active_state_bridges_mid_press_and_clears_on_release() {
         50.0,
         MouseEventButtons::None,
     )));
+    // The release is held for a short tail (PRESS_TAIL_MAX) so the pressed look fades
+    // out instead of vanishing; wait it out, then the next resolve clears :active.
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    doc.resolve(0.0);
     assert!(
         !doc.get_node(container).unwrap().is_active(),
         "stale :active element state left on ancestor after release"

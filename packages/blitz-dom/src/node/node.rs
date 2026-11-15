@@ -1620,7 +1620,7 @@ impl Node {
                 // against the viewport and do not scroll with it. (A fixed box
                 // whose containing block is a transformed ancestor scrolls with
                 // that ancestor like any other out-of-flow box.)
-                if child_position == taffy::Position::Fixed && self.containing_block().is_none() {
+                if child_position == taffy::Position::Fixed && self.is_root_element_or_document() {
                     child_x -= self.scroll_offset().x as f32;
                     child_y -= self.scroll_offset().y as f32;
                     let viewport_scroll = self.tree().viewport_scroll();
@@ -1776,6 +1776,20 @@ impl Node {
             let display = styles.clone_display();
             display.outside() == DisplayOutside::Inline && display.inside() == DisplayInside::Flow
         })
+    }
+
+    /// Whether this node is the document node or the root element (`<html>`): the
+    /// containing block that a viewport-fixed box is positioned against. The root
+    /// element's own `containing_block()` is the document node, not `None`, so
+    /// testing for `None` alone never matches it.
+    pub(crate) fn is_root_element_or_document(&self) -> bool {
+        match self.containing_block() {
+            None => true,
+            Some(parent) => self
+                .tree()
+                .get(parent)
+                .is_some_and(|p| p.containing_block().is_none() && p.parent.is_none()),
+        }
     }
 
     /// The node whose box this node's `Layout.location` is relative to: the

@@ -1906,8 +1906,13 @@ impl BaseDocument {
         // A tail from the previous press must not outlive into this one.
         self.unactive_node();
         let now = std::time::Instant::now();
+        if Self::PRESS_ONSET_DELAY.is_zero() {
+            // No onset delay: the look starts with the finger, not on the next frame.
+            self.active_node();
+        } else {
+            self.active_due = Some(now + Self::PRESS_ONSET_DELAY);
+        }
         self.press_started = Some(now);
-        self.active_due = Some(now + Self::PRESS_ONSET_DELAY);
         self.shell_provider.request_redraw();
     }
 
