@@ -270,6 +270,10 @@ pub struct BaseDocument {
     /// When set, the active node is released at this time (a finger lifted: the pressed
     /// look stays a moment so a quick tap is still seen).
     pub(crate) unactive_at: Option<std::time::Instant>,
+    /// A pressed look that is waiting its turn (the finger is down, the face not yet painted).
+    pub(crate) active_due: Option<std::time::Instant>,
+    /// When the finger went down (to size the release tail).
+    pub(crate) press_started: Option<std::time::Instant>,
     /// The node which recieved a mousedown event (if any)
     pub(crate) mousedown_node_id: Option<NodeId>,
     /// The last time a mousedown was made (for double-click detection)
@@ -492,6 +496,8 @@ impl BaseDocument {
             focus_node_id: None,
             active_node_id: None,
             unactive_at: None,
+            active_due: None,
+            press_started: None,
             mousedown_node_id: None,
             has_active_animations: false,
             subdoc_is_animating: false,
@@ -1886,17 +1892,54 @@ impl BaseDocument {
         true
     }
 
-    /// How long a pressed look stays after the finger lifts (50 ms).
-    pub const PRESS_RELEASE_DELAY: std::time::Duration = std::time::Duration::from_millis(50);
+    /// The pressed look is painted a moment after the finger goes down: there is a beat
+    /// between touching and pressing in, and a face painted at once feels too quick.
+    pub const PRESS_ONSET_DELAY: std::time::Duration = std::time::Duration::from_millis(60);
+    /// After the finger lifts the face stays 30 ms (a short tap) to 100 ms (held 300 ms or more).
+    pub const PRESS_TAIL_MIN: std::time::Duration = std::time::Duration::from_millis(30);
+    pub const PRESS_TAIL_MAX: std::time::Duration = std::time::Duration::from_millis(100);
+    pub const PRESS_TAIL_FULL_AT: std::time::Duration = std::time::Duration::from_millis(300);
 
-    /// Release the active node after [`Self::PRESS_RELEASE_DELAY`] instead of at once.
+    /// Finger down: paint the pressed look after [`Self::PRESS_ONSET_DELAY`].
+    pub fn active_node_later(&mut self) {
+        // A tail from the previous press must not outlive into this one.
+        self.unactive_node();
+        let now = std::time::Instant::now();
+        self.press_started = Some(now);
+        self.active_due = Some(now + Self::PRESS_ONSET_DELAY);
+        self.shell_provider.request_redraw();
+    }
+
+    /// Finger up: show the look now if it has not been painted yet (a quick tap), then
+    /// release it after a tail that grows with how long the finger was down.
     pub fn unactive_node_later(&mut self) -> bool {
+        if self.active_due.take().is_some() {
+            self.active_node();
+        }
         if self.active_node_id.is_none() {
             return false;
         }
-        self.unactive_at = Some(std::time::Instant::now() + Self::PRESS_RELEASE_DELAY);
+        let held = self
+            .press_started
+            .take()
+            .map(|t| t.elapsed())
+            .unwrap_or_default();
+        let k = (held.as_secs_f32() / Self::PRESS_TAIL_FULL_AT.as_secs_f32()).min(1.0);
+        let tail = Self::PRESS_TAIL_MIN + (Self::PRESS_TAIL_MAX - Self::PRESS_TAIL_MIN).mul_f32(k);
+        self.unactive_at = Some(std::time::Instant::now() + tail);
         self.shell_provider.request_redraw();
         true
+    }
+
+    /// Paint the pressed look if its turn has come.
+    pub(crate) fn paint_due_active_node(&mut self) -> bool {
+        match self.active_due {
+            Some(at) if std::time::Instant::now() >= at => {
+                self.active_due = None;
+                self.active_node()
+            }
+            _ => false,
+        }
     }
 
     /// Release the active node if its delay is over. Returns true when it was released.
@@ -1909,6 +1952,8 @@ impl BaseDocument {
 
     pub fn unactive_node(&mut self) -> bool {
         self.unactive_at = None;
+        self.active_due = None;
+        self.press_started = None;
         let Some(active_node_id) = self.active_node_id.take() else {
             return false;
         };
@@ -2220,6 +2265,7 @@ impl BaseDocument {
 
         self.has_canvas
             | self.unactive_at.is_some()
+            | self.active_due.is_some()
             | self.has_active_animations
             | self.subdoc_is_animating
             | custom_widget_is_animating

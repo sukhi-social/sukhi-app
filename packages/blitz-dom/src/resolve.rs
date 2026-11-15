@@ -46,6 +46,7 @@ impl BaseDocument {
         self.handle_messages();
 
         // A lifted finger's pressed look is released after a short delay.
+        self.paint_due_active_node();
         self.release_due_active_node();
 
         // While render-blocking resources (e.g. stylesheets linked from the `<head>`) are
