@@ -192,7 +192,7 @@ impl<'doc, Handler: EventHandler> EventDriver<'doc, Handler> {
             UiEvent::PointerUp(event) => {
                 hover_node_id = self.handle_pointer_move(event);
                 let mut doc = self.doc.inner_mut();
-                doc.unactive_node();
+                doc.unactive_node_later();
 
                 if event.is_primary && matches!(event.id, BlitzPointerId::Finger(_)) {
                     hover_end_event = Some(event.clone());

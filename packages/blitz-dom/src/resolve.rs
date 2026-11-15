@@ -45,6 +45,9 @@ impl BaseDocument {
         // Process messages that have been sent to our message channel (e.g. loaded resource)
         self.handle_messages();
 
+        // A lifted finger's pressed look is released after a short delay.
+        self.release_due_active_node();
+
         // While render-blocking resources (e.g. stylesheets linked from the `<head>`) are
         // still loading, don't resolve styles or layout (matching how browsers block
         // rendering). Resolving styles before the document's stylesheets have loaded would

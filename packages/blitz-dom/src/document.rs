@@ -267,6 +267,9 @@ pub struct BaseDocument {
     pub(crate) focus_node_id: Option<NodeId>,
     /// The node which is currently active (if any)
     pub(crate) active_node_id: Option<NodeId>,
+    /// When set, the active node is released at this time (a finger lifted: the pressed
+    /// look stays a moment so a quick tap is still seen).
+    pub(crate) unactive_at: Option<std::time::Instant>,
     /// The node which recieved a mousedown event (if any)
     pub(crate) mousedown_node_id: Option<NodeId>,
     /// The last time a mousedown was made (for double-click detection)
@@ -488,6 +491,7 @@ impl BaseDocument {
             last_client_pointer_position: None,
             focus_node_id: None,
             active_node_id: None,
+            unactive_at: None,
             mousedown_node_id: None,
             has_active_animations: false,
             subdoc_is_animating: false,
@@ -1858,6 +1862,7 @@ impl BaseDocument {
 
         if let Some(active_node_id) = self.active_node_id {
             if active_node_id == hover_node_id {
+                self.unactive_at = None;
                 return true;
             }
             self.unactive_node();
@@ -1881,7 +1886,29 @@ impl BaseDocument {
         true
     }
 
+    /// How long a pressed look stays after the finger lifts.
+    pub const PRESS_RELEASE_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+
+    /// Release the active node after [`Self::PRESS_RELEASE_DELAY`] instead of at once.
+    pub fn unactive_node_later(&mut self) -> bool {
+        if self.active_node_id.is_none() {
+            return false;
+        }
+        self.unactive_at = Some(std::time::Instant::now() + Self::PRESS_RELEASE_DELAY);
+        self.shell_provider.request_redraw();
+        true
+    }
+
+    /// Release the active node if its delay is over. Returns true when it was released.
+    pub(crate) fn release_due_active_node(&mut self) -> bool {
+        match self.unactive_at {
+            Some(at) if std::time::Instant::now() >= at => self.unactive_node(),
+            _ => false,
+        }
+    }
+
     pub fn unactive_node(&mut self) -> bool {
+        self.unactive_at = None;
         let Some(active_node_id) = self.active_node_id.take() else {
             return false;
         };
@@ -2192,6 +2219,7 @@ impl BaseDocument {
         let custom_widget_is_animating = false;
 
         self.has_canvas
+            | self.unactive_at.is_some()
             | self.has_active_animations
             | self.subdoc_is_animating
             | custom_widget_is_animating
