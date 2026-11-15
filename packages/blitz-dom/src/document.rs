@@ -1886,8 +1886,8 @@ impl BaseDocument {
         true
     }
 
-    /// How long a pressed look stays after the finger lifts.
-    pub const PRESS_RELEASE_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+    /// How long a pressed look stays after the finger lifts (50 ms).
+    pub const PRESS_RELEASE_DELAY: std::time::Duration = std::time::Duration::from_millis(50);
 
     /// Release the active node after [`Self::PRESS_RELEASE_DELAY`] instead of at once.
     pub fn unactive_node_later(&mut self) -> bool {
